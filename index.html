@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- 4. Force HTTPS: upgrade sub-requests + redirect top-level http:// (localhost exempt for dev) -->
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+    <script>
+        (function () {
+            var local = ["localhost", "127.0.0.1", "[::1]", ""].indexOf(location.hostname) !== -1;
+            if (location.protocol === "http:" && !local) location.replace("https:" + location.href.substring(5));
+            // First visit? Show the location screen from the very first paint (no flash of the home page).
+            try { if (localStorage.getItem("cafespot_location_gate") === "done") document.documentElement.classList.add("gate-done"); }
+            catch (e) { document.documentElement.classList.add("gate-done"); }
+            // Apply saved / system theme before paint to avoid a flash
+            try {
+                var t = JSON.parse(localStorage.getItem("cafespot_theme"));
+                if (t === "dark" || (!t && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");
+            } catch (e) {}
+        })();
+    </script>
+
+    <!-- 6. SEO -->
+    <title>Kapehan Tagum — Tara kape! Every café in Tagum City</title>
+    <meta name="description" content="Find 80 cafes and coffee shops in Tagum City, Davao del Norte: live map with distances, open-now status, menus with ₱ prices, Facebook pages, Wi-Fi and study spots, and your personal cafe checklist." />
+    <meta name="keywords" content="Tagum cafes, coffee shops Tagum City, study spots Tagum, Davao del Norte cafe, Kapehan Tagum" />
+    <meta name="author" content="Kapehan Tagum (@kapehan.tagum)" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#057d3c" />
+    <!-- Replace kapehan-tagum.example with your real domain before launch -->
+    <link rel="canonical" href="https://kapehan-tagum.example/" />
+
+    <!-- 7. OpenGraph / social previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kapehan Tagum" />
+    <meta property="og:title" content="Kapehan Tagum — Tara kape! Every café in Tagum City" />
+    <meta property="og:description" content="Live map, open-now status, menus and reviews for cafes around Tagum City." />
+    <meta property="og:url" content="https://kapehan-tagum.example/" />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&h=630&q=75" />
+    <meta property="og:image:alt" content="Warmly lit cafe interior with wooden tables" />
+    <meta property="og:locale" content="en_PH" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kapehan Tagum" />
+    <meta name="twitter:description" content="Tara kape! Find your next coffee stop in Tagum City." />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&h=630&q=75" />
+
+    <!-- 8. Favicon (inline SVG, no extra request) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23057d3c'/%3E%3Cpath d='M18 26h24v10a12 12 0 0 1-24 0z' fill='%23fff'/%3E%3Cpath d='M42 29h3a5 5 0 0 1 0 10h-3' stroke='%23fff' stroke-width='3' fill='none'/%3E%3Cpath d='M25 14c-2 3 2 5 0 8M32 14c-2 3 2 5 0 8' stroke='%23a7f3d0' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="sitemap" type="application/xml" href="sitemap.xml" />
+
+    <!-- 12. Performance: preconnect to third-party origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+
+    <!-- Type: Young Serif (display) + Hanken Grotesk (text and interface).
+         Bricolage Grotesque stays loaded for the two protected café-page panels and the Explore map, which keep their original type. -->
+    <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Hanken+Grotesk:wght@400..750&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Tailwind (CDN build is fine for demos; use the Tailwind CLI for production to purge unused CSS) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { DEFAULT: "#057d3c", dark: "#046330", light: "#10b981" },
+                        canvas: "rgb(var(--canvas) / <alpha-value>)",
+                        surface: "rgb(var(--surface) / <alpha-value>)",
+                        ink: "rgb(var(--ink) / <alpha-value>)",
+                        muted: "rgb(var(--muted) / <alpha-value>)",
+                        line: "rgb(var(--line) / <alpha-value>)",
+                        accent: "rgb(var(--accent) / <alpha-value>)",
+                        soft: "rgb(var(--soft) / <alpha-value>)"
+                    },
+                    fontFamily: {
+                        sans: ['"Hanken Grotesk"', "Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+                        display: ['"Young Serif"', '"Iowan Old Style"', "Charter", "Georgia", "serif"]
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Design layer: palette, type, motion and every component outside the protected panels -->
+    <link rel="stylesheet" href="kapehan.css" />
+</head>
+<body class="bg-canvas text-ink font-sans antialiased min-h-screen flex flex-col">
+
+<!-- FIRST-VISIT LOCATION SCREEN
+     Shown before the home/login page on the first visit. It asks the browser for location
+     right away and loads the coordinates while the site renders underneath, then fades out.
+     Logic: setupLocationGate() in app.js. Hidden on later visits (html.gate-done). -->
+<div id="locate-gate" class="locate-gate" role="dialog" aria-modal="true" aria-labelledby="gate-title" aria-describedby="gate-text" data-state="asking">
+    <div class="gate-card">
+        <div class="gate-radar" aria-hidden="true">
+            <span class="gate-ring"></span><span class="gate-ring"></span><span class="gate-ring"></span>
+            <span class="gate-cafe" style="--x:-62px;--y:-34px;--d:0"></span>
+            <span class="gate-cafe" style="--x:48px;--y:-58px;--d:1"></span>
+            <span class="gate-cafe" style="--x:70px;--y:22px;--d:2"></span>
+            <span class="gate-cafe" style="--x:-30px;--y:58px;--d:3"></span>
+            <span class="gate-cafe" style="--x:-78px;--y:18px;--d:4"></span>
+            <span class="gate-cafe" style="--x:22px;--y:66px;--d:5"></span>
+            <span class="gate-pin"><svg aria-hidden="true"><use href="#i-pin"/></svg></span>
+        </div>
+        <p class="gate-brand">Kapehan Tagum</p>
+        <h1 id="gate-title" class="gate-title">Asa man ka? Pangitaon nato ang duol nga kape</h1>
+        <p id="gate-text" class="gate-text" aria-live="polite">Tap <strong>Allow</strong> when your browser asks. Then the map opens where you are and every café shows how far it is.</p>
+        <div class="gate-actions">
+            <button type="button" id="gate-primary" class="hero-btn" hidden>Try again</button>
+            <button type="button" id="gate-skip" class="gate-skip">Continue without location</button>
+        </div>
+        <p class="gate-note">Your location stays on this device. It's only used for the map and distances.</p>
+    </div>
+</div>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<!-- SVG icon sprite (11. one compressed sprite, referenced with <use>) -->
+<svg xmlns="http://www.w3.org/2000/svg" class="hidden" aria-hidden="true">
+    <symbol id="i-cup" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9h13v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6zM17 11h1.5a2.5 2.5 0 0 1 0 5H17M8 3v2M12 3v2"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5" fill="currentColor"/></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path fill="currentColor" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-fb" viewBox="0 0 24 24"><path fill="currentColor" d="M13.5 21v-7.5h2.6l.4-3h-3V8.6c0-.9.3-1.5 1.5-1.5h1.6V4.4c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H7.9v3h2.6V21z"/></symbol>
+    <symbol id="i-ig" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.3" cy="6.7" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="currentColor" d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-medal" viewBox="0 0 24 24"><circle cx="12" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M8 3h8l-2 6.5M8 3l2 6.5"/><path fill="currentColor" d="m12 12 1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L9 14.3l2-.3z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7c1.7 0 3.2-.5 4.5-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m11.2 11.8 8.8-8.8M17 6l3 3M14.5 8.5l2 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-wheel" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="1.6" d="M12 4.5v17M3.5 13h17M6 7l12 12M18 7 6 19"/><circle cx="12" cy="13" r="2.4" fill="currentColor"/><path fill="currentColor" d="M9.2 1h5.6L12 5.2z"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path fill="currentColor" d="M4 9h4l5-4v14l-5-4H4z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path fill="currentColor" d="M4 9h4l5-4v14l-5-4H4z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
+    <symbol id="i-list-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m3.5 6.5 1.8 1.8L8.5 5M3.5 13.5l1.8 1.8 3.2-3.3M11.5 7h9M11.5 14h9M4.5 20h.01M11.5 20h9"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 4h8v6a4 4 0 0 1-8 0zM8 6H4.5a3.5 3.5 0 0 0 3.6 4M16 6h3.5a3.5 3.5 0 0 1-3.6 4M12 14v4M8.5 21h7M10 18h4"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 9.5 5.5 4h13L20 9.5M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0M5 12v8h14v-8M10 20v-5h4v5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<!-- Ink texture for the rubber stamps (kept outside the hidden sprite so the filter renders) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <filter id="stamp-ink" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="noise" />
+        <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.55" result="speckle" />
+        <feComposite in="SourceGraphic" in2="speckle" operator="in" result="inked" />
+        <feDisplacementMap in="inked" in2="noise" scale="1.8" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+</svg>
+
+<!-- Header -->
+<header class="site-header sticky top-0 z-40" id="site-header">
+    <div class="max-w-7xl mx-auto flex justify-between items-center gap-3 px-4 md:px-6 h-16">
+        <a href="#/" class="k-brand" aria-label="Kapehan Tagum home">
+            <span class="k-brand__mark"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-cup"/></svg></span>
+            <span class="min-w-0">
+                <span class="k-brand__name">Kapehan Tagum</span>
+                <span id="profile-display-handle" class="k-brand__handle">@kapehan.tagum</span>
+            </span>
+        </a>
+
+        <div class="flex items-center gap-2 shrink-0">
+            <button id="theme-toggle" class="hdr-icon" type="button" aria-label="Switch to dark mode">
+                <svg class="w-5 h-5 theme-icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+                <svg class="w-5 h-5 theme-icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+            </button>
+            <a href="#/account" id="profile-display-name" class="hdr-chip" title="Your account">Guest Account</a>
+            <button id="auth-login-btn" type="button" class="hdr-btn">Log In</button>
+            <button id="auth-logout-btn" type="button" class="hdr-btn hdr-btn--quiet hidden">Log Out</button>
+        </div>
+    </div>
+</header>
+
+<!-- Main -->
+<main id="main" class="max-w-7xl mx-auto w-full flex-1 px-4 md:px-6 pt-5 pb-28 md:pb-10" tabindex="-1">
+
+    <!-- HOME / LANDING -->
+    <section id="view-home" class="view-panel" data-title="Kapehan Tagum — Tara kape! Every café in Tagum City">
+        <!-- Signed-in dashboard (rendered by renderDashboard() in app.js) -->
+        <div id="home-dashboard" class="hidden"></div>
+
+        <!-- Logged-out landing: hero, guest progress strip, feature cards -->
+        <div id="home-guest">
+            <section class="k-hero" aria-labelledby="hero-title">
+                <div class="k-hero__copy">
+                    <p class="k-hero__place"><svg class="w-4 h-4" aria-hidden="true"><use href="#i-pin"/></svg>Tagum City, Davao del Norte</p>
+                    <h1 id="hero-title" class="k-hero__title">
+                        <span class="k-hero__title-main">Tara kape!</span>
+                        <span class="k-hero__title-sub">Ang tanang kapehan sa Tagum, naa ra diri.</span>
+                    </h1>
+                    <p class="k-hero__lead">Kape lang gihapon maski sakit na ang tiyan? Pareha ta. See which cafés are open right now, how far they are and what's on the menu, down to the last peso. Pang-laban sa tapol, pang-celebrate sa sweldo.</p>
+                    <div class="k-hero__actions">
+                        <a href="#/explore" id="hero-cta" class="k-btn">Pangita og kape</a>
+                        <button type="button" class="k-btn k-btn--ghost" data-action="open-wheel">
+                            <svg class="w-5 h-5" aria-hidden="true"><use href="#i-wheel"/></svg>Ikaw na'y bahala, wheel!
+                        </button>
+                    </div>
+                    <p class="k-hero__note">Kulang ang tulog, sobra ang kape? Normal ra na diri.</p>
+                </div>
+                <!-- Live slip: the open cafés nearest you, set like a menu board. Filled by renderHeroSlip() in app.js. -->
+                <div id="hero-slip"></div>
+            </section>
+
+            <div id="home-guest-progress"></div>
+
+            <div class="k-notes">
+                <section class="k-note">
+                    <svg class="k-note__icon" aria-hidden="true"><use href="#i-locate"/></svg>
+                    <h2>Unsa ka layo?</h2>
+                    <p>Share your location and every café shows how far it is, live as you move. Para dili ka mahutdan og gasolina, o pasensya.</p>
+                </section>
+                <section class="k-note">
+                    <svg class="k-note__icon" aria-hidden="true"><use href="#i-clock"/></svg>
+                    <h2>Abri pa ba?</h2>
+                    <p>Hours are checked against Philippine time, so you never arrive at a closed door with your kape craving.</p>
+                </section>
+                <section class="k-note">
+                    <svg class="k-note__icon" aria-hidden="true"><use href="#i-check"/></svg>
+                    <h2>Pila na ka tasa?</h2>
+                    <p>Tick off every café you try and watch your cup fill up. Unang tasa, unang stamp!</p>
+                </section>
+            </div>
+        </div><!-- /#home-guest -->
+
+        <div class="k-section-head">
+            <h2 id="home-top-heading">Abri pa karon</h2>
+            <a href="#/explore" class="k-link">See all cafés</a>
+        </div>
+        <div id="home-top-list" class="card-grid"></div>
+    </section>
+
+    <!-- EXPLORE -->
+    <!-- EXPLORE = split screen + visit checklist
+         Left  (sticky): interactive map with every café; the selected one's pin grows.
+         Right (scrolls): checklist header (cup fills as you visit), filters, then ALL cafés
+                          as compact rows. Tick a row to mark it visited; tap its name to
+                          open its description + menu right there. Rendered by renderExplore(). -->
+    <section id="view-explore" class="view-panel hidden" data-title="Explore Cafes · Kapehan Tagum">
+        <div class="x-split">
+            <aside class="x-map-col" aria-label="Map of all cafés">
+                <div class="x-map-wrap">
+                    <div id="explore-map" class="x-map" role="region" aria-label="Map of the cafés in the list"></div>
+                    <ul class="x-legend" aria-label="Map key">
+                        <li><span class="x-legend__dot" style="background:#057d3c"></span>Open</li>
+                        <li><span class="x-legend__dot" style="background:#6b7280"></span>Closed</li>
+                        <li><span class="x-legend__dot" style="background:#0f766e"></span>Hours not listed</li>
+                        <li><span class="x-legend__dot" style="background:#f2b33d"></span>Visited</li>
+                    </ul>
+                    <a href="#/map" class="map-chip map-chip--left">Full map</a>
+                    <button type="button" class="map-chip" data-action="explore-fit" aria-label="Show all cafés on the map">
+                        <svg class="w-4 h-4" aria-hidden="true"><use href="#i-map"/></svg><span>All cafés</span>
+                    </button>
+                </div>
+            </aside>
+
+            <div class="x-list-col">
+                <section class="explore-head" aria-labelledby="explore-heading">
+                    <h1 id="explore-heading" class="x-title">Asa ta magkape karon?</h1>
+                    <p class="text-sm text-muted mt-1"><span id="explore-progress"></span> <a href="#/checklist" class="link-btn">Open checklist</a></p>
+                    <div class="seg-filter mt-3" role="radiogroup" aria-label="Show" id="visit-filter">
+                        <button type="button" role="radio" aria-checked="true" data-visit-filter="all">All</button>
+                        <button type="button" role="radio" aria-checked="false" data-visit-filter="todo">To visit</button>
+                        <button type="button" role="radio" aria-checked="false" data-visit-filter="done">Visited</button>
+                    </div>
+                </section>
+
+                <div class="x-tools">
+                    <label class="relative block">
+                        <span class="sr-only">Search cafes</span>
+                        <svg class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"><use href="#i-search"/></svg>
+                        <input id="search-input" type="search" maxlength="60" placeholder="Search a café, street or drink (pila na lang ka cup?)" class="input pl-11" autocomplete="off" />
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="sr-only" for="area-select">Filter by area</label>
+                        <select id="area-select" class="input w-auto pr-8"><option value="">All areas</option></select>
+                        <label class="sr-only" for="sort-select">Sort cafes</label>
+                        <select id="sort-select" class="input w-auto pr-8">
+                            <option value="open">Open now first</option>
+                            <option value="distance">Nearest first</option>
+                            <option value="name">A–Z</option>
+                            <option value="rating">Top rated</option>
+                        </select>
+                        <button id="explore-locate-btn" type="button" class="btn-outline whitespace-nowrap">
+                            <svg class="w-4 h-4" aria-hidden="true"><use href="#i-locate"/></svg>
+                            <span>Use my location</span>
+                        </button>
+                    </div>
+                    <div id="tag-filters" class="flex gap-2 overflow-x-auto no-scrollbar pb-1" role="group" aria-label="Filter by amenity"></div>
+                </div>
+
+                <div class="flex items-center justify-between gap-3 mt-1 mb-2">
+                    <p id="explore-meta" class="text-sm text-muted" aria-live="polite"></p>
+                    <button id="open-add-cafe-btn" type="button" class="link-btn">
+                        <svg class="w-4 h-4 mr-1" aria-hidden="true"><use href="#i-plus"/></svg>Add a café
+                    </button>
+                </div>
+
+                <ul id="explore-cafe-list" class="x-rows" aria-label="Cafés"></ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- MAP -->
+    <section id="view-map" class="view-panel hidden" data-title="Tagum Cafe Map · Kapehan Tagum">
+        <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+            <h1 class="k-page-title" style="margin-bottom:0">Tagum City Map</h1>
+            <div class="flex items-center gap-2">
+                <span id="location-status" class="text-xs text-muted" aria-live="polite">Location off</span>
+                <button id="map-locate-btn" type="button" class="btn-primary">
+                    <svg class="w-4 h-4" aria-hidden="true"><use href="#i-locate"/></svg>
+                    <span>Track my location</span>
+                </button>
+            </div>
+        </div>
+        <div class="grid lg:grid-cols-[1fr_320px] gap-4">
+            <div id="map-container" class="w-full h-[60vh] min-h-[380px] border z-0" role="region" aria-label="Map of cafes in Tagum City"></div>
+            <aside class="k-map-aside p-4 max-h-[60vh] overflow-y-auto">
+                <h2 class="k-h2 mb-3" style="font-size:1.2rem">Nearby cafés</h2>
+                <ol id="map-nearby-list" class="space-y-2"></ol>
+            </aside>
+        </div>
+    </section>
+
+    <!-- SAVED -->
+    <!-- CHECKLIST: every café, grouped by area. Tick = visited (synced with Explore, stamps and badges). -->
+    <section id="view-checklist" class="view-panel hidden" data-title="Café checklist · Kapehan Tagum">
+        <header class="cl-head" aria-labelledby="checklist-heading">
+            <div class="cup-meter cup-meter--big" id="cup-meter" role="progressbar" aria-labelledby="checklist-heading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <defs><clipPath id="cup-clip"><path d="M12 18h34v20a15 15 0 0 1-15 15h-4a15 15 0 0 1-15-15z"/></clipPath></defs>
+                    <g clip-path="url(#cup-clip)">
+                        <rect x="0" y="0" width="64" height="64" class="cup-meter__empty"/>
+                        <g class="cup-meter__liquid" id="cup-liquid"><path class="cup-meter__wave" d="M-40 0 q10 -4 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 V80 H-40z"/></g>
+                    </g>
+                    <path d="M12 18h34v20a15 15 0 0 1-15 15h-4a15 15 0 0 1-15-15z" class="cup-meter__outline"/>
+                    <path d="M46 24h4a7 7 0 0 1 0 14h-4" class="cup-meter__outline"/>
+                    <path d="M24 6c-2 3 2 5 0 8M32 4c-2 3 2 5 0 8" class="cup-meter__steam"/>
+                </svg>
+            </div>
+            <div class="min-w-0 flex-1">
+                <h1 id="checklist-heading" class="x-title">Pila na ka tasa?</h1>
+                <p id="checklist-progress-text" class="text-muted mt-1"></p>
+                <div class="cl-tools">
+                    <div class="seg-filter" role="radiogroup" aria-label="Show" id="checklist-filter">
+                        <button type="button" role="radio" aria-checked="true" data-check-filter="all">All</button>
+                        <button type="button" role="radio" aria-checked="false" data-check-filter="todo">To visit</button>
+                        <button type="button" role="radio" aria-checked="false" data-check-filter="done">Visited</button>
+                    </div>
+                    <label class="relative block cl-search">
+                        <span class="sr-only">Find a café in the checklist</span>
+                        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"><use href="#i-search"/></svg>
+                        <input id="checklist-search" type="search" maxlength="60" placeholder="Pangita og kapehan" class="input" autocomplete="off" />
+                    </label>
+                </div>
+            </div>
+        </header>
+        <div id="checklist-groups" class="cl-groups"></div>
+    </section>
+
+    <!-- ACCOUNT: profile, sign-in on this device, recovery key, activity; log in / sign up when logged out -->
+    <section id="view-account" class="view-panel hidden" data-title="Your account · Kapehan Tagum">
+        <div id="account-body"></div>
+    </section>
+
+    <!-- OWNER DASHBOARD (café owners): publish listings, official photos, page analytics. Rendered by renderOwner(). -->
+    <section id="view-owner" class="view-panel hidden" data-title="Owner dashboard · Kapehan Tagum">
+        <div id="owner-body"></div>
+    </section>
+
+    <!-- LEADERBOARD (café finders): top explorers by cafés stamped + most-visited cafés. Rendered by renderLeaderboard(). -->
+    <section id="view-leaderboard" class="view-panel hidden" data-title="Leaderboard · Kapehan Tagum">
+        <div id="leaderboard-body"></div>
+    </section>
+
+    <section id="view-saved" class="view-panel hidden" data-title="Saved Spots · Kapehan Tagum">
+        <h1 class="k-page-title">Mga gi-save nimo</h1>
+        <div id="saved-cafe-list" class="card-grid"></div>
+    </section>
+
+    <!-- ADMIN (rendered only for admin sessions; guarded in app.js) -->
+    <!-- CAFE PAGE: split screen
+         Left  (sticky on desktop): interactive map · live distance in km · real photos
+         Right (scrolls):          description · menu · opening hours · reviews
+         Phones: the two halves stack, map and photos first. Filled by renderCafeDetail() in app.js. -->
+    <section id="view-cafe" class="view-panel hidden" data-title="Cafe · Kapehan Tagum" aria-labelledby="detail-title">
+        <div class="cafe-split">
+            <aside class="cafe-split__media" aria-label="Map, distance and photos">
+                <div class="split-bar">
+                    <button type="button" class="btn-outline split-back" data-action="close-cafe">
+                        <svg class="w-4 h-4" aria-hidden="true"><use href="#i-back"/></svg><span>Back</span>
+                    </button>
+                    <span id="split-crumb" class="text-sm text-muted truncate flex-1 min-w-0"></span>
+                    <button type="button" class="btn-outline split-back shrink-0" data-action="open-wheel">
+                        <svg class="w-4 h-4" aria-hidden="true"><use href="#i-wheel"/></svg><span>Spin pag-usab</span>
+                    </button>
+                </div>
+                <div class="split-map-wrap">
+                    <div id="cafe-map" class="split-map" role="region" aria-label="Map showing the cafe and your location"></div>
+                    <button type="button" class="map-chip" data-action="fit-cafe-map" aria-label="Show the whole route">
+                        <svg class="w-4 h-4" aria-hidden="true"><use href="#i-locate"/></svg><span>Recenter</span>
+                    </button>
+                </div>
+                <div id="cafe-distance" class="distance-card" aria-live="polite"></div>
+                <section id="cafe-photos" class="split-photos" aria-labelledby="photos-title"></section>
+            </aside>
+            <article id="cafe-info" class="cafe-split__info"></article>
+        </div>
+    </section>
+
+    <section id="view-admin" class="view-panel hidden" data-title="Admin Dashboard · Kapehan Tagum">
+        <div id="admin-locked" class="hidden max-w-md mx-auto text-center py-16">
+            <span class="feature-icon mx-auto"><svg class="w-6 h-6" aria-hidden="true"><use href="#i-shield"/></svg></span>
+            <h2 class="text-2xl font-extrabold mt-4">Restricted area</h2>
+            <p class="text-muted mt-2">The admin dashboard is only available to administrator accounts.</p>
+            <button type="button" class="btn-primary mt-6" data-action="open-login">Log in as admin</button>
+        </div>
+
+        <div id="admin-content" class="hidden">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-5">
+                <div>
+                    <h2 class="text-xl md:text-2xl font-extrabold">Admin Dashboard</h2>
+                    <p class="text-sm text-muted">Manage the cafe directory and review registered accounts.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" class="btn-outline" id="admin-reset-btn">Reset directory</button>
+                    <button type="button" class="btn-primary" id="admin-add-btn">
+                        <svg class="w-4 h-4" aria-hidden="true"><use href="#i-plus"/></svg> Add cafe
+                    </button>
+                </div>
+            </div>
+
+            <div id="admin-stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6"></div>
+
+            <div class="admin-card mb-6">
+                <h3 class="font-bold mb-3">Cafe directory</h3>
+                <div class="overflow-x-auto">
+                    <table class="admin-table">
+                        <thead><tr><th scope="col">Cafe</th><th scope="col">Area</th><th scope="col">Hours</th><th scope="col">Rating</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                        <tbody id="admin-cafe-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-card mb-6">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold">User audit &amp; privacy</h3>
+                    <span class="text-xs text-muted">Personal data is masked</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="admin-table">
+                        <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Handle</th><th scope="col">Joined</th><th scope="col">Last login</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                        <tbody id="admin-user-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-card mb-6">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold">Login activity log</h3>
+                    <span class="text-xs text-muted"><span id="admin-login-count">0 total</span> · names, handles &amp; emails masked</span>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="admin-table">
+                        <thead><tr><th scope="col">When</th><th scope="col">Name</th><th scope="col">Handle</th><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Type</th></tr></thead>
+                        <tbody id="admin-login-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="font-bold mb-3">Analytics events <span class="text-xs font-normal text-muted">(last 15, consenting visitors on this device)</span></h3>
+                <ul id="admin-events" class="text-xs font-mono space-y-1 text-muted"></ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRIVACY POLICY -->
+    <section id="view-privacy" class="view-panel hidden prose-page" data-title="Privacy Policy · Kapehan Tagum">
+        <h2>Privacy Policy</h2>
+        <p class="text-muted text-sm">Last updated: October 19, 2026</p>
+        <p>Kapehan Tagum ("we", "us") respects your privacy and follows the Philippine Data Privacy Act of 2012 (Republic Act No. 10173). This page explains what we collect and why.</p>
+        <h3>What we collect</h3>
+        <ul>
+            <li><strong>Account details</strong> you give us: name, email, handle, and a hashed (never plain-text) password and recovery key.</li>
+            <li><strong>Your sign-in session.</strong> With “Keep me logged in” it stays on this device for 30 days; without it, it ends when you close the browser. Accounts kept logged in are listed on this device's log-in screen until you remove them.</li>
+            <li><strong>Your location</strong>, only if you allow it, to show distances to cafes. It is processed in your browser and is not uploaded or stored.</li>
+            <li><strong>Login activity</strong> (time, account and device type) for security auditing. Administrators only see it with names, handles and emails partly masked.</li>
+            <li><strong>Saved and visited cafes</strong>, reviews you post, badges you earn and a history of these on your dashboard.</li>
+            <li><strong>Anonymous café page counts</strong> (views, check-ins, saves, direction and social-link taps, with no names attached), shown to that café's owner in the owner dashboard.</li>
+            <li><strong>Usage events</strong> (pages viewed, searches, logins) only if you accept analytics cookies.</li>
+        </ul>
+        <h3>Where it is stored</h3>
+        <p>In this version, all data is stored in your own browser's local storage. Clearing your browser data removes it.</p>
+        <h3>Your rights</h3>
+        <p>You may access, correct or delete your data at any time. Decline analytics in the cookie banner to stop event logging, or contact us to request deletion.</p>
+        <h3>Contact</h3>
+        <p>Data protection questions: reach us through our social handle <strong>@kapehan.tagum</strong>.</p>
+        <p><a href="#/" class="text-accent font-semibold underline">Back to home</a></p>
+    </section>
+
+    <!-- TERMS -->
+    <section id="view-terms" class="view-panel hidden prose-page" data-title="Terms &amp; Conditions · Kapehan Tagum">
+        <h2>Terms &amp; Conditions</h2>
+        <p class="text-muted text-sm">Last updated: October 18, 2026</p>
+        <h3>1. Using Kapehan Tagum</h3>
+        <p>Kapehan Tagum is a free guide to cafes in Tagum City. By using it you agree to these terms.</p>
+        <h3>2. Listing accuracy</h3>
+        <p>Cafe details are gathered from public listings and delivery apps and may change. Card thumbnails are stock images (the cafe pages only show real photos of each cafe), map pins may be approximate, distances are estimates, and prices can differ in store. Always confirm with the cafe before visiting. Links to cafes' social pages go to third-party sites we don't control.</p>
+        <h3>3. Your content</h3>
+        <p>Reviews and cafe submissions must be honest, respectful, and based on real experiences. We may remove spam, offensive content or fake reviews, and suspend accounts that post them.</p>
+        <h3>4. Accounts</h3>
+        <p>Keep your password private. You are responsible for activity on your account.</p>
+        <h3>5. Liability</h3>
+        <p>Kapehan Tagum is provided "as is". We are not responsible for decisions made based on listing information.</p>
+        <p><a href="#/" class="text-accent font-semibold underline">Back to home</a></p>
+    </section>
+
+    <!-- 15. Custom 404 -->
+    <section id="view-notfound" class="view-panel hidden" data-title="Page not found · Kapehan Tagum">
+        <div class="max-w-md mx-auto text-center py-16">
+            <p class="k-404">404</p>
+            <h1 class="k-page-title" style="margin:.75rem 0 0">Ubos na ang kape diri</h1>
+            <p class="text-muted mt-2">We couldn't find <code id="notfound-path" class="text-xs bg-soft px-1.5 py-0.5 rounded"></code>. Basin nabalhin, o wala gyud nag-exist. Balik ta sa kape.</p>
+            <div class="flex justify-center gap-2 mt-6">
+                <a href="#/" class="btn-outline">Go home</a>
+                <a href="#/explore" class="btn-primary">Tara kape!</a>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- Footer -->
+<footer class="site-footer mb-16 md:mb-0">
+    <div class="max-w-7xl mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row gap-3 justify-between text-sm text-muted">
+        <p>© 2026 Kapehan Tagum, <span class="font-medium">@kapehan.tagum</span>. Gihimo nga puno sa kape (ug gamay nga tulog).</p>
+        <nav class="flex flex-wrap gap-x-4 gap-y-1" aria-label="Footer">
+            <a href="#/privacy">Privacy Policy</a>
+            <a href="#/terms">Terms &amp; Conditions</a>
+            <button type="button" data-action="cookie-settings">Cookie settings</button>
+            <a href="sitemap.xml">Sitemap</a>
+        </nav>
+    </div>
+</footer>
+
+<!-- PHONE TAB BAR: the four main places (Map and Saved live in Explore / Account) -->
+<nav class="tab-bar md:hidden safe-bottom" aria-label="Main">
+    <span class="nav-indicator" aria-hidden="true"></span>
+    <a href="#/owner" data-nav="owner" data-for="owner" class="tab-link"><svg aria-hidden="true"><use href="#i-store"/></svg><span>Dashboard</span></a>
+    <a href="#/" data-nav="home" data-for="finder" class="tab-link"><svg aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></a>
+    <a href="#/explore" data-nav="explore" class="tab-link"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Explore</span></a>
+    <a href="#/checklist" data-nav="checklist" data-for="finder" class="tab-link"><svg aria-hidden="true"><use href="#i-list-check"/></svg><span>Checklist</span><b class="nav-badge" data-checklist-badge hidden></b></a>
+    <a href="#/leaderboard" data-nav="leaderboard" data-for="finder" class="tab-link"><svg aria-hidden="true"><use href="#i-trophy"/></svg><span>Leaders</span></a>
+    <a href="#/account" data-nav="account" class="tab-link"><svg aria-hidden="true"><use href="#i-user"/></svg><span>Account</span></a>
+</nav>
+
+<!-- 5. Cookie consent -->
+<div id="cookie-banner" class="cookie-banner hidden" role="dialog" aria-live="polite" aria-label="Cookie consent">
+    <div class="k-cookie max-w-3xl mx-auto p-4 md:p-5 flex flex-col md:flex-row gap-4 md:items-center">
+        <p class="text-sm text-ink flex-1">
+            We use essential storage to keep you logged in and remember your checklist. With your permission we also log anonymous usage events to improve Kapehan Tagum. Promise, kape ra among hilig.
+            <a href="#/privacy" class="link-btn">Privacy Policy</a>
+        </p>
+        <div class="flex gap-2 shrink-0">
+            <button type="button" id="cookie-decline" class="btn-outline">Decline</button>
+            <button type="button" id="cookie-accept" class="btn-primary">Accept</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toasts -->
+<!-- SIDE RAIL (tablets and computers): the four main places + secondary links.
+     The highlight slides to the current page (positionNavIndicators() in app.js). -->
+<nav class="side-rail" aria-label="Main">
+    <a href="#/" class="side-rail__logo" aria-label="Kapehan Tagum home"><svg class="w-6 h-6" aria-hidden="true"><use href="#i-cup"/></svg></a>
+    <ul class="side-rail__list">
+        <li class="nav-indicator" role="presentation" aria-hidden="true"></li>
+        <li data-for="owner"><a href="#/owner" data-nav="owner" class="rail-link"><svg aria-hidden="true"><use href="#i-store"/></svg><span>Dashboard</span></a></li>
+        <li data-for="finder"><a href="#/" data-nav="home" class="rail-link"><svg aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></a></li>
+        <li><a href="#/explore" data-nav="explore" class="rail-link"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Explore</span></a></li>
+        <li data-for="finder"><a href="#/checklist" data-nav="checklist" class="rail-link"><svg aria-hidden="true"><use href="#i-list-check"/></svg><span>Checklist</span><b class="nav-badge" data-checklist-badge hidden></b></a></li>
+        <li data-for="finder"><a href="#/leaderboard" data-nav="leaderboard" class="rail-link"><svg aria-hidden="true"><use href="#i-trophy"/></svg><span>Leaders</span></a></li>
+        <li><a href="#/account" data-nav="account" class="rail-link"><svg aria-hidden="true"><use href="#i-user"/></svg><span>Account</span></a></li>
+    </ul>
+    <ul class="side-rail__list side-rail__list--more">
+        <li class="nav-indicator" role="presentation" aria-hidden="true"></li>
+        <li><a href="#/map" data-nav="map" class="rail-link rail-link--small"><svg aria-hidden="true"><use href="#i-map"/></svg><span>Map</span></a></li>
+        <li><a href="#/saved" data-nav="saved" class="rail-link rail-link--small"><svg aria-hidden="true"><use href="#i-heart"/></svg><span>Saved</span></a></li>
+        <li class="admin-only hidden"><a href="#/admin" data-nav="admin" class="rail-link rail-link--small"><svg aria-hidden="true"><use href="#i-shield"/></svg><span>Admin</span></a></li>
+    </ul>
+</nav>
+
+<!-- Floating "Spin the wheel" button: always on screen, opens the 3D roulette -->
+<button type="button" id="spin-fab" class="spin-fab" data-action="open-wheel" aria-label="Tara kape! Spin the wheel to pick a random café">
+    <span class="spin-fab__wheel" aria-hidden="true"><span class="spin-fab__hub"></span></span>
+    <span class="spin-fab__pointer" aria-hidden="true"></span>
+    <span class="spin-fab__label">Tara kape!</span>
+</button>
+<div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="false"></div>
+
+<!-- ============ DIALOGS ============ -->
+
+<!-- Auth: log in · sign up · forgot password · recovery key · new recovery key
+     One dialog, five panels. app.js shows one panel at a time with showAuthPanel(). -->
+<dialog id="auth-modal" class="modal" aria-labelledby="auth-title">
+    <div class="modal-card">
+        <div class="flex items-center gap-2 mb-1">
+            <button type="button" class="icon-btn-muted -ml-2 hidden" id="auth-back" aria-label="Back to log in"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-back"/></svg></button>
+            <h3 id="auth-title" class="text-lg font-extrabold flex-1">Welcome back! Kape ta?</h3>
+            <button type="button" class="icon-btn-muted" data-close aria-label="Close"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+        <p id="auth-subtitle" class="text-sm text-muted mb-4">Log in to see your stamps, badges and history.</p>
+
+        <div class="segmented mb-5" role="tablist" aria-label="Account" id="auth-tabs">
+            <button type="button" role="tab" id="tab-login" aria-selected="true" aria-controls="login-form" data-auth-tab="login">Log In</button>
+            <button type="button" role="tab" id="tab-register" aria-selected="false" aria-controls="register-form" data-auth-tab="register">Sign Up</button>
+        </div>
+
+        <!-- 1. LOG IN -->
+        <form id="login-form" class="auth-panel space-y-3" novalidate role="tabpanel" aria-labelledby="tab-login">
+            <!-- "Continue as …" for accounts remembered on this device -->
+            <div id="known-accounts" class="known-accounts"></div>
+
+            <div class="field">
+                <label for="login-identifier">Email or handle</label>
+                <input id="login-identifier" name="identifier" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required data-validate="required" class="input" placeholder="you@email.com or @handle" />
+                <p class="field-error" id="login-identifier-error"></p>
+            </div>
+            <div class="field">
+                <div class="flex items-baseline justify-between gap-2">
+                    <label for="login-password">Password</label>
+                    <button type="button" class="link-btn" data-auth-go="forgot">Forgot password?</button>
+                </div>
+                <div class="pw-wrap">
+                    <input id="login-password" name="password" type="password" autocomplete="current-password" required data-validate="required" class="input" />
+                    <button type="button" class="pw-toggle" data-pw-toggle aria-label="Show password" aria-pressed="false"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-eye"/></svg></button>
+                </div>
+                <p class="field-error" id="login-password-error"></p>
+            </div>
+            <label class="remember-row">
+                <input name="remember" type="checkbox" class="check" checked />
+                <span><strong>Keep me logged in</strong> on this device for 30 days. Untick on shared or school computers.</span>
+            </label>
+            <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <p class="form-error" role="alert"></p>
+            <button type="submit" class="btn-primary w-full justify-center py-3">Log In</button>
+            <p class="text-sm text-center text-muted">New to Kapehan Tagum? <button type="button" class="link-btn" data-auth-go="register">Create an account</button></p>
+        </form>
+
+        <!-- 2. SIGN UP -->
+        <form id="register-form" class="auth-panel space-y-3 hidden" novalidate role="tabpanel" aria-labelledby="tab-register">
+            <div class="field">
+                <label for="reg-name">Full name</label>
+                <input id="reg-name" name="name" type="text" autocomplete="name" required maxlength="50" data-validate="name" class="input" placeholder="e.g. Maria Clara" />
+                <p class="field-error" id="reg-name-error"></p>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-3">
+                <div class="field">
+                    <label for="reg-email">Email</label>
+                    <input id="reg-email" name="email" type="email" autocomplete="email" autocapitalize="none" required maxlength="120" data-validate="email" class="input" placeholder="you@email.com" />
+                    <p class="field-error" id="reg-email-error"></p>
+                </div>
+                <div class="field">
+                    <label for="reg-handle">Handle</label>
+                    <input id="reg-handle" name="handle" type="text" autocomplete="nickname" autocapitalize="none" required maxlength="25" data-validate="handle" class="input" placeholder="@mariaclara" />
+                    <p class="field-error" id="reg-handle-error"></p>
+                </div>
+            </div>
+            <div class="field">
+                <label for="reg-password">Password</label>
+                <div class="pw-wrap">
+                    <input id="reg-password" name="password" type="password" autocomplete="new-password" required data-validate="password" data-meter="#pw-meter-bar" class="input" aria-describedby="pw-meter-label" />
+                    <button type="button" class="pw-toggle" data-pw-toggle aria-label="Show password" aria-pressed="false"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-eye"/></svg></button>
+                </div>
+                <div class="pw-meter" aria-hidden="true"><span id="pw-meter-bar"></span></div>
+                <p id="pw-meter-label" class="text-xs text-muted mt-1">8+ characters, upper &amp; lower case, and a number.</p>
+                <p class="field-error" id="reg-password-error"></p>
+            </div>
+            <div class="field">
+                <label for="reg-confirm">Confirm password</label>
+                <input id="reg-confirm" name="confirm" type="password" autocomplete="new-password" required data-validate="confirm" data-match="#reg-password" class="input" />
+                <p class="field-error" id="reg-confirm-error"></p>
+            </div>
+            <label class="remember-row">
+                <input name="remember" type="checkbox" class="check" checked />
+                <span><strong>Keep me logged in</strong> on this device for 30 days.</span>
+            </label>
+            <label class="flex items-start gap-2 text-sm">
+                <input id="reg-agree" name="agree" type="checkbox" required class="check mt-0.5" />
+                <span>I agree to the <a href="#/terms" class="text-accent underline font-semibold" data-close-link>Terms</a> and <a href="#/privacy" class="text-accent underline font-semibold" data-close-link>Privacy Policy</a>.</span>
+            </label>
+            <p class="field-error" id="reg-agree-error"></p>
+            <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <p class="form-error" role="alert"></p>
+            <button type="submit" class="btn-primary w-full justify-center py-3">Create account</button>
+        </form>
+
+        <!-- 3. FORGOT PASSWORD (two steps: who are you → recovery key + new password) -->
+        <form id="forgot-form" class="auth-panel space-y-3 hidden" novalidate data-step="identify">
+            <ol class="auth-steps" aria-label="Recovery steps">
+                <li data-step-dot="identify" aria-current="step">Your account</li>
+                <li data-step-dot="verify">Recovery key</li>
+                <li data-step-dot="done">New password</li>
+            </ol>
+
+            <div data-step-panel="identify" class="space-y-3">
+                <div class="field">
+                    <label for="forgot-identifier">Email or handle on your account</label>
+                    <input id="forgot-identifier" name="identifier" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" data-validate="required" class="input" placeholder="you@email.com or @handle" />
+                    <p class="field-error" id="forgot-identifier-error"></p>
+                </div>
+                <!-- Shown only when the site runs on a backend that can send email (AUTH_MODE.recovery = "email-link") -->
+                <p class="text-sm text-muted" data-recovery="email-link">We'll email you a link to choose a new password. The link expires after one hour.</p>
+            </div>
+
+            <div data-step-panel="verify" class="space-y-3 hidden">
+                <div class="info-box">
+                    <svg class="w-5 h-5 shrink-0" aria-hidden="true"><use href="#i-key"/></svg>
+                    <p>Enter the <strong>recovery key</strong> you saved when you created your account. It looks like <span class="font-mono">ABCD-EFGH-JKMN-PQRS</span>.</p>
+                </div>
+                <div class="field">
+                    <label for="forgot-key">Recovery key</label>
+                    <input id="forgot-key" name="recoveryKey" type="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="24" data-validate="recoveryKey" class="input font-mono" placeholder="XXXX-XXXX-XXXX-XXXX" />
+                    <p class="field-error" id="forgot-key-error"></p>
+                </div>
+                <div class="field">
+                    <label for="forgot-password">New password</label>
+                    <div class="pw-wrap">
+                        <input id="forgot-password" name="password" type="password" autocomplete="new-password" data-validate="password" data-meter="#forgot-meter-bar" class="input" />
+                        <button type="button" class="pw-toggle" data-pw-toggle aria-label="Show password" aria-pressed="false"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-eye"/></svg></button>
+                    </div>
+                    <div class="pw-meter" aria-hidden="true"><span id="forgot-meter-bar"></span></div>
+                    <p class="field-error" id="forgot-password-error"></p>
+                </div>
+                <div class="field">
+                    <label for="forgot-confirm">Confirm new password</label>
+                    <input id="forgot-confirm" name="confirm" type="password" autocomplete="new-password" data-validate="confirm" data-match="#forgot-password" class="input" />
+                    <p class="field-error" id="forgot-confirm-error"></p>
+                </div>
+                <label class="remember-row">
+                    <input name="remember" type="checkbox" class="check" checked />
+                    <span><strong>Keep me logged in</strong> on this device.</span>
+                </label>
+            </div>
+
+            <div data-step-panel="sent" class="hidden">
+                <div class="info-box">
+                    <svg class="w-5 h-5 shrink-0" aria-hidden="true"><use href="#i-check"/></svg>
+                    <p id="forgot-sent-text">If an account uses that email, a reset link is on its way. Check your inbox and spam folder.</p>
+                </div>
+            </div>
+
+            <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <p class="form-error" role="alert"></p>
+            <button type="submit" class="btn-primary w-full justify-center py-3" id="forgot-submit">Continue</button>
+
+            <details class="help-details" data-recovery="recovery-key">
+                <summary>I lost my recovery key too</summary>
+                <p>Without the key, the password can't be reset from this page, because there's no email server to confirm it's you. Ask the Kapehan Tagum admin to remove the old account, then sign up again. Stamps you collected as a guest on this device carry over to a new account.</p>
+            </details>
+        </form>
+
+        <!-- 4. RECOVERY KEY (shown once, after sign-up or a reset) -->
+        <section id="key-panel" class="auth-panel hidden" aria-labelledby="auth-title">
+            <div class="key-card">
+                <p class="text-xs font-bold text-muted">Your recovery key</p>
+                <p id="key-value" class="key-value" translate="no">XXXX-XXXX-XXXX-XXXX</p>
+                <div class="flex flex-wrap gap-2 justify-center">
+                    <button type="button" class="btn-outline" data-key-action="copy"><svg class="w-4 h-4" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button>
+                    <button type="button" class="btn-outline" data-key-action="download"><svg class="w-4 h-4" aria-hidden="true"><use href="#i-download"/></svg>Download .txt</button>
+                </div>
+            </div>
+            <ul class="key-notes">
+                <li>It's the only way to reset your password if you forget it.</li>
+                <li>Keep it somewhere private: a password manager, or written down at home.</li>
+                <li>Each key works once. After a reset you get a new one.</li>
+            </ul>
+            <label class="remember-row mt-4">
+                <input id="key-ack" type="checkbox" class="check" />
+                <span><strong>I've saved my recovery key.</strong></span>
+            </label>
+            <button type="button" id="key-done" class="btn-primary w-full justify-center py-3 mt-3" disabled>Go to my dashboard</button>
+        </section>
+
+        <!-- 5. NEW RECOVERY KEY (signed-in users; asks for the password first) -->
+        <form id="rekey-form" class="auth-panel space-y-3 hidden" novalidate>
+            <div class="info-box">
+                <svg class="w-5 h-5 shrink-0" aria-hidden="true"><use href="#i-key"/></svg>
+                <p>A new key replaces your old one, which stops working right away.</p>
+            </div>
+            <div class="field">
+                <label for="rekey-password">Your password</label>
+                <div class="pw-wrap">
+                    <input id="rekey-password" name="password" type="password" autocomplete="current-password" data-validate="required" class="input" />
+                    <button type="button" class="pw-toggle" data-pw-toggle aria-label="Show password" aria-pressed="false"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-eye"/></svg></button>
+                </div>
+                <p class="field-error" id="rekey-password-error"></p>
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit" class="btn-primary w-full justify-center py-3">Create new recovery key</button>
+        </form>
+    </div>
+</dialog>
+
+<!-- Add / edit cafe -->
+<dialog id="cafe-form-modal" class="modal" aria-labelledby="cafe-form-title">
+    <div class="modal-card">
+        <div class="flex items-center justify-between mb-4">
+            <h3 id="cafe-form-title" class="text-lg font-extrabold">Add New Cafe Spot</h3>
+            <button type="button" class="icon-btn-muted" data-close aria-label="Close"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+        <form id="cafe-form" class="space-y-3" novalidate>
+            <input type="hidden" name="id" />
+            <div class="field">
+                <label for="cafe-name-input">Cafe name</label>
+                <input id="cafe-name-input" name="name" type="text" required maxlength="60" data-validate="cafeName" class="input" placeholder="Cafe name" />
+                <p class="field-error" id="cafe-name-input-error"></p>
+            </div>
+            <div class="field">
+                <label for="cafe-address-input">Address</label>
+                <input id="cafe-address-input" name="address" type="text" required maxlength="120" data-validate="address" class="input" placeholder="e.g. Apokon Road, Tagum City" />
+                <p class="field-error" id="cafe-address-input-error"></p>
+            </div>
+            <div class="field">
+                <label for="cafe-area-input">Neighborhood / barangay <span class="text-muted font-normal">(optional)</span></label>
+                <input id="cafe-area-input" name="neighborhood" type="text" maxlength="40" class="input" placeholder="e.g. Magugpo Poblacion" />
+            </div>
+            <div class="field">
+                <label for="cafe-note-input">Description <span class="text-muted font-normal">(optional)</span></label>
+                <textarea id="cafe-note-input" name="note" rows="3" maxlength="400" class="input" placeholder="What makes your café worth a visit? Signature drinks, vibe, seating, Wi-Fi…"></textarea>
+            </div>
+            <div class="field">
+                <label for="cafe-menu-input">Menu <span class="text-muted font-normal">(optional)</span></label>
+                <textarea id="cafe-menu-input" name="menuText" rows="5" class="input font-mono text-sm" placeholder="# Coffee&#10;Spanish Latte - 120&#10;Americano - 95&#10;# Pastries&#10;Ensaymada - 60"></textarea>
+                <p class="text-xs text-muted mt-1">One item per line as <strong>Name - price</strong>. Start a line with <strong>#</strong> for a section (Coffee, Pastries…).</p>
+            </div>
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="hoursUnknown" id="cafe-hours-unknown" class="check" />
+                Hours not published yet
+            </label>
+            <p id="cafe-hours-hint" class="text-xs text-muted"></p>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="field">
+                    <label for="cafe-open-input">Opens</label>
+                    <input id="cafe-open-input" name="open" type="time" required value="08:00" class="input" />
+                </div>
+                <div class="field">
+                    <label for="cafe-close-input">Closes</label>
+                    <input id="cafe-close-input" name="close" type="time" required value="22:00" class="input" />
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="field">
+                    <label for="cafe-lat-input">Latitude <span class="text-muted font-normal">(optional)</span></label>
+                    <input id="cafe-lat-input" name="lat" type="number" step="0.0001" inputmode="decimal" data-validate="lat" class="input" placeholder="7.4478" />
+                    <p class="field-error" id="cafe-lat-input-error"></p>
+                </div>
+                <div class="field">
+                    <label for="cafe-lng-input">Longitude <span class="text-muted font-normal">(optional)</span></label>
+                    <input id="cafe-lng-input" name="lng" type="number" step="0.0001" inputmode="decimal" data-validate="lng" class="input" placeholder="125.8078" />
+                    <p class="field-error" id="cafe-lng-input-error"></p>
+                </div>
+            </div>
+            <div class="field">
+                <label for="cafe-fb-input">Facebook page <span class="text-muted font-normal">(optional)</span></label>
+                <input id="cafe-fb-input" name="facebook" type="url" maxlength="200" data-validate="facebook" class="input" placeholder="https://www.facebook.com/yourcafe" />
+                <p class="field-error" id="cafe-fb-input-error"></p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="field">
+                    <label for="cafe-ig-input">Instagram <span class="text-muted font-normal">(optional)</span></label>
+                    <input id="cafe-ig-input" name="instagram" type="text" maxlength="31" data-validate="instagram" class="input" placeholder="@yourcafe" />
+                    <p class="field-error" id="cafe-ig-input-error"></p>
+                </div>
+                <div class="field">
+                    <label for="cafe-phone-input">Phone <span class="text-muted font-normal">(optional)</span></label>
+                    <input id="cafe-phone-input" name="phone" type="tel" maxlength="20" data-validate="phone" class="input" placeholder="+63 9XX XXX XXXX" />
+                    <p class="field-error" id="cafe-phone-input-error"></p>
+                </div>
+            </div>
+            <button type="button" id="cafe-use-location" class="text-xs font-semibold text-accent inline-flex items-center gap-1">
+                <svg class="w-4 h-4" aria-hidden="true"><use href="#i-locate"/></svg> Fill with my current location
+            </button>
+            <fieldset>
+                <legend class="text-xs font-semibold text-muted mb-2">Amenities</legend>
+                <div id="cafe-tag-options" class="flex flex-wrap gap-2"></div>
+            </fieldset>
+            <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
+            <p class="form-error" role="alert"></p>
+            <div class="flex gap-2 pt-2">
+                <button type="button" data-close class="btn-outline flex-1 justify-center">Cancel</button>
+                <button type="submit" class="btn-primary flex-1 justify-center">Save Cafe</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- ROLE PICKER: shown after log-in (and after sign-up). The choice decides where you land
+     and which navigation you see; switch any time from Account. -->
+<dialog id="role-modal" class="modal role-modal" aria-labelledby="role-title" aria-describedby="role-desc">
+    <div class="modal-card role-card">
+        <h3 id="role-title" class="x-title">Unsaon nimo paggamit ang Kapehan Tagum?</h3>
+        <p id="role-desc" class="text-muted mt-1">Pick one. You can switch any time from your account.</p>
+        <div class="role-options" role="radiogroup" aria-labelledby="role-title">
+            <button type="button" class="role-option" role="radio" aria-checked="false" data-persona-choice="finder">
+                <span class="role-option__icon"><svg aria-hidden="true"><use href="#i-compass"/></svg></span>
+                <span class="role-option__name">Café finder</span>
+                <span class="role-option__text">Browse the directory and map, tick off cafés you visit and climb the leaderboard. Pang-laban sa tapol!</span>
+            </button>
+            <button type="button" class="role-option" role="radio" aria-checked="false" data-persona-choice="owner">
+                <span class="role-option__icon"><svg aria-hidden="true"><use href="#i-store"/></svg></span>
+                <span class="role-option__name">Café owner</span>
+                <span class="role-option__text">Publish your café, add official photos and see how many people view and visit your page. Tara, ipaila imong kape!</span>
+            </button>
+        </div>
+        <label class="remember-row mt-4">
+            <input id="role-remember" type="checkbox" class="check" checked />
+            <span><strong>Remember my choice</strong> and skip this next time I log in.</span>
+        </label>
+        <button type="button" id="role-continue" class="btn-primary w-full justify-center py-3 mt-4" disabled>Continue</button>
+    </div>
+</dialog>
+
+<!-- Spin the wheel: a tilted 3D roulette with every café (or a filtered set).
+     Drag/flick the wheel or press SPIN. Where it settles, that café's split-screen page opens. -->
+<dialog id="wheel-modal" class="modal wheel-modal" aria-labelledby="wheel-title" aria-describedby="wheel-desc">
+    <div class="modal-card wheel-card">
+        <div class="flex items-center justify-between gap-2">
+            <h3 id="wheel-title" class="text-lg font-extrabold">Dili ka kahibaw asa? Ipa-spin na lang!</h3>
+            <div class="flex items-center gap-1">
+                <button type="button" id="wheel-sound" class="icon-btn-muted" aria-pressed="true" aria-label="Sound on" title="Sound on">
+                    <svg class="w-5 h-5" aria-hidden="true"><use href="#i-sound"/></svg>
+                </button>
+                <button type="button" class="icon-btn-muted" data-close aria-label="Close"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-x"/></svg></button>
+            </div>
+        </div>
+        <p id="wheel-desc" class="text-sm text-muted mt-1">Patas ang tanan: every café has the same chance. Press SPIN, or grab the wheel and flick it. Ayaw na'g reklamo sa resulta!</p>
+
+        <div id="wheel-filters" class="wheel-filters no-scrollbar" role="radiogroup" aria-label="Which cafés go on the wheel"></div>
+
+        <div class="wheel-stage" id="wheel-stage">
+            <div class="wheel-tilt">
+                <span class="wheel-floor" aria-hidden="true"></span>
+                <div class="wheel-body" id="wheel-body">
+                    <div class="wheel-disc"><canvas id="wheel-canvas" class="wheel-canvas" aria-hidden="true"></canvas></div>
+                    <span class="wheel-gloss" aria-hidden="true"></span>
+                </div>
+                <span class="wheel-flapper" id="wheel-flapper" aria-hidden="true"></span>
+                <button type="button" id="wheel-hub" class="wheel-hub" data-wheel-spin aria-label="Spin the wheel"><span>SPIN</span></button>
+            </div>
+            <canvas id="wheel-confetti" class="wheel-confetti" aria-hidden="true"></canvas>
+        </div>
+
+        <p id="wheel-readout" class="wheel-readout" aria-hidden="true">&nbsp;</p>
+        <p id="wheel-live" class="sr-only" aria-live="assertive"></p>
+        <div id="wheel-result" class="wheel-result" hidden></div>
+
+        <button type="button" id="wheel-spin" class="btn-primary w-full justify-center py-3 mt-3" data-wheel-spin>
+            <svg class="w-5 h-5" aria-hidden="true"><use href="#i-wheel"/></svg><span>I-spin na!</span>
+        </button>
+
+        <details class="wheel-list">
+            <summary id="wheel-list-summary">See all cafés on the wheel</summary>
+            <ol id="wheel-list-items"></ol>
+        </details>
+    </div>
+</dialog>
+
+<!-- Photo viewer for the cafe page gallery (arrow keys / swipe to browse) -->
+<dialog id="photo-modal" class="modal photo-modal" aria-label="Photo viewer">
+    <figure class="photo-viewer">
+        <button type="button" class="photo-viewer__close icon-btn" data-close aria-label="Close photo"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <button type="button" class="photo-viewer__nav photo-viewer__nav--prev icon-btn" data-photo-step="-1" aria-label="Previous photo"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-back"/></svg></button>
+        <img id="photo-viewer-img" alt="" />
+        <button type="button" class="photo-viewer__nav photo-viewer__nav--next icon-btn" data-photo-step="1" aria-label="Next photo"><svg class="w-5 h-5" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        <figcaption id="photo-viewer-caption"></figcaption>
+    </figure>
+</dialog>
+
+<!-- Confirm -->
+<dialog id="confirm-modal" class="modal" aria-labelledby="confirm-title">
+    <div class="modal-card max-w-sm">
+        <h3 id="confirm-title" class="text-lg font-extrabold">Are you sure?</h3>
+        <p id="confirm-text" class="text-sm text-muted mt-2"></p>
+        <div class="flex gap-2 mt-5">
+            <button type="button" class="btn-outline flex-1 justify-center" data-confirm="no">Cancel</button>
+            <button type="button" class="btn-danger flex-1 justify-center" data-confirm="yes">Delete</button>
+        </div>
+    </div>
+</dialog>
+
+<noscript>
+    <div class="fixed inset-0 bg-canvas grid place-items-center p-6 text-center z-[100]">
+        <p>Kapehan Tagum needs JavaScript enabled to show cafes and the map.</p>
+    </div>
+</noscript>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

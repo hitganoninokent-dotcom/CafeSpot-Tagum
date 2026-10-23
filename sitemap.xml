@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CafeSpot Tagum sitemap (mock).
+  Replace cafespot-tagum.example with your real domain.
+  Note: search engines ignore everything after "#", so hash routes all map to "/".
+  When you move to a server or a framework with real paths (/explore, /map, /privacy …),
+  list each path here.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://CafeSpot_Tagum.example/</loc>
+        <lastmod>2026-10-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+    </url>
+</urlset>

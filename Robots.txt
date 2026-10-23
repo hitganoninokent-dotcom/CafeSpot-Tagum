@@ -1,7 +1,0 @@
-# CafeSpot Tagum — robots.txt
-# Replace cafespot-tagum.example with your real domain before launch.
-User-agent: *
-Allow: /
-Disallow: /#/admin
-
-Sitemap: https://cafespot-tagum.example/sitemap.xml
